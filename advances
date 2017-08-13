@@ -1,3 +1,3 @@
 1. optimize data
 2. add propsType
-3.
+3. check isFormSubmitted atleast once and remove the the state isFormSubmitted

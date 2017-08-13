@@ -1,123 +1,138 @@
 import React, { Component } from 'react';
-import Questions from './Data';
-import 'react-select/dist/react-select.css';
-import ReactSelect from 'react-select';
-// import SelectElement from './SelectElement';
-class SelectElement extends Component {
+import _ from 'underscore';
+import './css/QuestionsList.css';
+import { store } from './index';
+//import actions
+import {
+    setSubmitionStatus,
+    resetAllAnswers,
+    resetAnswer,
+    addAnswer,
+    updateAnswerOfQuestion
+} from './index';
+import { connect } from 'react-redux';
+
+class QuestionsList extends Component {
     constructor(props) {
         super(props);
-        this.state = { selectedValue: 'Select...' };
+        this.handleInputChange = this.handleInputChange.bind(this);
+        this.clearAllAnswer = this.clearAllAnswer.bind(this);
+        this.handleSubmit = this.handleSubmit.bind(this);
     }
-    logChange(selectedValue) {
-        console.log('Selected: ' + JSON.stringify(selectedValue));
-        this.setState({ selectedValue: selectedValue });
+    clearAllAnswer() {
+        //use thunk
+        store.dispatch(setSubmitionStatus(false));
+        store.dispatch(resetAllAnswers());
     }
 
-    formatOptions(options) {
-        let formattedOptions = options.map(eachOpt => ({
-            value: eachOpt.Solution,
-            label: eachOpt.Solution
-        }));
-        console.log(formattedOptions);
-        return formattedOptions;
-    }
-    render() {
-        return (
-            <ReactSelect
-                value={this.state.selectedValue}
-                options={this.formatOptions(this.props.eachQuestion.Options)}
-                onChange={selectedValue => {
-                    this.setState({ selectedValue: selectedValue });
-                    this.props.updateValue(
-                        selectedValue,
-                        this.props.questionNumber
-                    );
-                }}
-            />
-        );
-    }
-}
-class EachQuestion extends Component {
-    isAnswered() {
-        if (this.props.isAnswered === false) {
-            return 'not-answer';
-        }
-        return '';
-    }
-    render() {
-        return (
-            <div className={this.isAnswered()}>
-                <p>
-                    {this.props.eachQuestion.Description}
-                </p>
-                <SelectElement
-                    questionNumber={this.props.questionNumber}
-                    eachQuestion={this.props.eachQuestion}
-                    updateValue={this.props.updateValue}
-                />
-            </div>
-        );
-    }
-}
-
-class QuestoinsList extends Component {
-    constructor(props) {
-        super(props);
-        this.state = {
-            questions: Array(Questions.length).fill(null),
-            isAnswered: Array(Questions.length).fill(null)
-        };
-    }
-    getAllSelectedValue() {
-        const isAnswerAllQuestions = this.checkValidation();
-        if (isAnswerAllQuestions) {
-            console.log('form submit=', this.state);
+    handleInputChange(event) {
+        const { name: questionNumber, value } = event.target;
+        const answer = _.find(this.props.answers, {
+            questionNumber: questionNumber
+        });
+        if (answer) {
+            if (value === '') {
+                store.dispatch(resetAnswer(questionNumber));
+            } else {
+                store.dispatch(updateAnswerOfQuestion(questionNumber, value));
+            }
         } else {
-            this.state.questions.forEach((question, index) => {
-                console.log('this', this);
-                if (question !== null) {
-                    const isAnswered = this.state.isAnswered;
-                    isAnswered[index] == true;
-                    this.setState({ isAnswered: isAnswered });
-                } else {
-                    const isAnswered = this.state.isAnswered;
-                    isAnswered[index] == false;
-                    this.setState({ isAnswered: isAnswered });
-                }
-            });
+            store.dispatch(addAnswer(questionNumber, value));
         }
     }
-    checkValidation() {
-        return this.state.questions.every(answer => answer !== null);
+    _isAllQuestionsAnswered() {
+        if (this.props.questions.length === this.props.answers.length) {
+            return true;
+        } else {
+            return false;
+        }
     }
-    updateValue(updatedValue, questionNumber) {
-        const questions = this.state.questions.slice();
-        questions[questionNumber] = updatedValue;
-        this.setState({ questions: questions });
+
+    handleSubmit(event) {
+        event.preventDefault();
+        store.dispatch(setSubmitionStatus(true));
+        if (!this._isAllQuestionsAnswered()) {
+            return false;
+        }
     }
     render() {
+        const { questions } = this.props;
         return (
-            <div>
-                <ul>
-                    {Questions.map((eachQuestion, i) => {
-                        return (
-                            <EachQuestion
-                                key={i}
-                                isAnswered={this.state.isAnswered[i]}
-                                questionNumber={i}
-                                eachQuestion={eachQuestion}
-                                updateValue={this.updateValue.bind(this)}
-                            />
-                        );
-                    })}
-                </ul>
+            <form name="questionsPaper" onSubmit={this.handleSubmit}>
+                <div>
+                    {questions.map(eachQuestion =>
+                        <EachQuestions
+                            key={eachQuestion.id}
+                            eachQuestion={eachQuestion}
+                            handleInputChange={this.handleInputChange}
+                        />
+                    )}
+                </div>
+
+                <button type="submit">Submit</button>
                 <input
                     type="button"
-                    value="submit"
-                    onClick={this.getAllSelectedValue.bind(this)}
+                    value="Clear All Answewrs"
+                    onClick={this.clearAllAnswer}
                 />
-            </div>
+            </form>
         );
     }
 }
-export default QuestoinsList;
+const mapStateToProps = state => ({
+    questions: state.questions,
+    answers: state.answers
+});
+export const QuestionsLists = connect(mapStateToProps)(QuestionsList);
+
+const EachQuestion = ({
+    isFormSubmitted,
+    eachQuestion,
+    handleInputChange,
+    answer
+}) => {
+    console.log('Form submission', eachQuestion);
+    return (
+        <div
+            className={
+                (isFormSubmitted &&
+                    (!answer || answer.selectedOption.length === 0)) === true
+                    ? 'need-answer each-question '
+                    : 'each-question '
+            }
+        >
+            <label>
+                {eachQuestion.description}
+            </label>
+            <SelectElement
+                handleInputChange={handleInputChange}
+                selectedOption={answer ? answer.selectedOption : ''}
+                eachQuestion={eachQuestion}
+            />
+        </div>
+    );
+};
+const mapStateToPropsOfEachQuestion = (state, { eachQuestion }) => ({
+    isFormSubmitted: state.formSubmitted,
+    answer: _.find(state.answers, {
+        questionNumber: eachQuestion.id.toString()
+    })
+});
+const EachQuestions = connect(mapStateToPropsOfEachQuestion)(EachQuestion);
+
+const SelectElement = ({ handleInputChange, selectedOption, eachQuestion }) =>
+    <select
+        onChange={handleInputChange}
+        name={eachQuestion.id}
+        value={selectedOption}
+    >
+        <option value="">Select...</option>
+        {calculateOptions(eachQuestion.options)}
+    </select>;
+const calculateOptions = options =>
+    options.map(option =>
+        <option key={option.id} value={option.id}>
+            {option.text}
+        </option>
+    );
+export default QuestionsList;
